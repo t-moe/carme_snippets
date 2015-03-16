@@ -11,6 +11,7 @@ void init_gpio() {
 	//Taster&Leds konfigurieren
 	RCC_APB1PeriphClockCmd(RCC_AHB1Periph_GPIOA | RCC_AHB1Periph_GPIOC,ENABLE);
 	GPIO_InitTypeDef t;
+	GPIO_StructInit(&t);
 
 	t.GPIO_Mode = GPIO_Mode_AF; //alternate function
 	t.GPIO_PuPd = GPIO_PuPd_NOPULL;
@@ -36,6 +37,9 @@ void init_timer(){
 	TIM_TimeBaseInitTypeDef tbi;
 	TIM_OCInitTypeDef toi;
 	TIM_ICInitTypeDef tii;
+	TIM_TimeBaseStructInit(&tbi);
+	TIM_OCStructInit(&toi);
+	TIM_ICStructInit(&tii);
 
 
 	//PWM output with TIM5 (100khz/10us)
@@ -87,6 +91,9 @@ void init_isr(){
 	NVIC_EnableIRQ(TIM4_IRQn);
 }
 
+#define NUM_SAMPLES 16
+volatile uint16_t cc2_arr[NUM_SAMPLES];
+volatile uint8_t cc2_arr_ind=0;
 volatile uint16_t cc1 =0;
 volatile uint16_t cc2 = 0;
 volatile bool update=false;
@@ -100,6 +107,8 @@ void TIM4_IRQHandler(void) {
 	else if(TIM_GetITStatus(TIM4,TIM_IT_CC2)==SET) {
 		TIM_ClearITPendingBit(TIM4,TIM_IT_CC2);
 		cc2 = TIM_GetCapture2(TIM4);
+		cc2_arr[cc2_arr_ind++]=cc2;
+		cc2_arr_ind%=NUM_SAMPLES;
 		update=true;
 	}
 
@@ -124,10 +133,24 @@ int main(void)
 	while(1) {
 		while(!update);
 		update=false;
-		sprintf(buf,"%d",cc1);
+		sprintf(buf,"Period: %d",cc1);
 		LCD_DisplayStringLine(0,buf);
-		sprintf(buf,"%d",cc2);
+		sprintf(buf,"Pulse: %d",cc2);
 		LCD_DisplayStringLine(1,buf);
+		sprintf(buf,"Echotime: %d us",cc2*2);
+		LCD_DisplayStringLine(2,buf);
+		sprintf(buf,"Distance %d cm",cc2*2/58);
+		LCD_DisplayStringLine(2,buf);
+
+		uint64_t i_sum=0;
+		int i;
+		for(i=0; i<NUM_SAMPLES; i++) {
+			i_sum+=cc2_arr[i];
+		}
+		i_sum/=NUM_SAMPLES;
+		sprintf(buf,"Distance smoothed %d cm",i_sum*2/58);
+		LCD_DisplayStringLine(3,buf);
+
 
 	}
 	return 0;
